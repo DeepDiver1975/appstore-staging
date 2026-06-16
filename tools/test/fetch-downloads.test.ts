@@ -3,6 +3,8 @@ import {
   selectReleases,
   buildRawDownloads,
   buildAppCounts,
+  selectClassicRelease,
+  CLASSIC_REPO,
   SURFACE_REPOS,
   type GhRelease,
 } from "../src/cli/fetch-downloads.js";
@@ -118,5 +120,44 @@ describe("SURFACE_REPOS", () => {
       android: "owncloud/android",
       ios: "owncloud/ios",
     });
+  });
+
+  it("does not include the classic server (it is surfaced separately)", () => {
+    expect(Object.values(SURFACE_REPOS)).not.toContain(CLASSIC_REPO);
+  });
+});
+
+describe("selectClassicRelease", () => {
+  const classic = (tag_name: string, overrides: Partial<GhRelease> = {}): GhRelease =>
+    gh({ tag_name, ...overrides });
+
+  it("picks the highest release on a supported 10.15/10.16 line", () => {
+    const picked = selectClassicRelease([
+      classic("v10.16.2"),
+      classic("v10.16.3"),
+      classic("v10.15.3"),
+    ]);
+    expect(picked?.tag_name).toBe("v10.16.3");
+  });
+
+  it("compares patch components numerically rather than lexically", () => {
+    const picked = selectClassicRelease([classic("v10.16.9"), classic("v10.16.10")]);
+    expect(picked?.tag_name).toBe("v10.16.10");
+  });
+
+  it("ignores drafts, prereleases and out-of-range lines", () => {
+    const picked = selectClassicRelease([
+      classic("v10.16.3", { draft: true }),
+      classic("v10.16.2", { prerelease: true }),
+      classic("v10.14.0"),
+      classic("v11.0.0"),
+      classic("v10.15.3"),
+    ]);
+    expect(picked?.tag_name).toBe("v10.15.3");
+  });
+
+  it("returns null when no supported release is present", () => {
+    expect(selectClassicRelease([classic("v10.14.0"), classic("v11.0.0")])).toBeNull();
+    expect(selectClassicRelease([])).toBeNull();
   });
 });
